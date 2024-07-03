@@ -202,9 +202,7 @@ namespace Apple.Core
                             {
                                 if (buildStep.IsNativePlugIn)
                                 {
-                                    _appleUnityPackages[buildStep.DisplayName] = 
-                                        new AppleUnityPackage("Local Project",
-                                            buildStep.DisplayName, new string[] { Application.dataPath, "Packages" });
+                                    _appleUnityPackages[buildStep.DisplayName] = new AppleUnityPackage("Local Project", buildStep.DisplayName, Application.dataPath);
                                 }
                                 else
                                 {
@@ -399,7 +397,7 @@ namespace Apple.Core
                 // Apple packages with native libraries will always have a build step defined for handling those libraries, so validate here.
                 if (buildStep != null && buildStep.IsNativePlugIn && buildStep.DisplayName == unityPackage.displayName && unityPackage.author.name == AppleUnityPackageAuthorName && !_appleUnityPackages.ContainsKey(unityPackage.displayName))
                 {
-                    AppleUnityPackage applePackage = new AppleUnityPackage(unityPackage.name, unityPackage.displayName, new string[] { unityPackage.resolvedPath });
+                    AppleUnityPackage applePackage = new AppleUnityPackage(unityPackage.name, unityPackage.displayName, unityPackage.resolvedPath);
                     if (!applePackage.PlayModeSupportLibrary.IsValid)
                     {
                         string warningMessage = $"[Apple Unity Plug-ins] Unable to locate a macOS native library for {applePackage.DisplayName}\n"
@@ -488,7 +486,7 @@ namespace Apple.Core
             {
                 if (package.IsNativePackage)
                 {
-                    summary += $"\n<b>{package.DisplayName}</b> [{package.Name}]:\n  Package Search Paths: {string.Join(", ", package.SearchPaths)}\n";
+                    summary += $"\n<b>{package.DisplayName}</b> [{package.Name}]:\n  Package Source Path: {package.SourcePath}\n";
                     var debugLibraries = package.GetLibraries(AppleConfigID.Debug);
                     if (debugLibraries.Length > 0)
                     {
