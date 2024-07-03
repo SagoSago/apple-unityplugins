@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace Apple.Core
@@ -17,83 +18,88 @@ namespace Apple.Core
         /// <param name="name">Matches the 'name' field of the associated package's <c>package.json</c> file. Should be of the form <c>com.apple.unityplugin.XXX</c>.</param>
         /// <param name="displayName">Matches the 'displayName' field of the associated package's <c>package.json</c> file</param>
         /// <param name="packageSystemPath">The local file system path to the plug-in as provided by the Unity package manager.</param>
-        public AppleUnityPackage(string name, string displayName, string packageSystemPath)
+        public AppleUnityPackage(string name, string displayName, string[] searchPaths)
         {
             Name = name;
             DisplayName = displayName;
             PlayModeSupportLibrary = AppleNativeLibrary.Invalid;
-            SourcePath = packageSystemPath;
+            SearchPaths = searchPaths;
             IsNativePackage = true;
 
             _nativeLibraryCollection = new Dictionary<string, Dictionary<string, AppleNativeLibrary>>();
 
-            if (Directory.Exists(packageSystemPath))
+            var directoryExists = Directory.Exists(searchPaths[0]);
+            var directories = Directory.GetDirectories(searchPaths[0], AppleNativeLibraryUtility.SourceNativeLibraryFolderName, SearchOption.AllDirectories);
+
+            string[] nativeLibraryRootPaths = searchPaths
+                .SelectMany(path => 
+                    Directory.Exists(path) ? 
+                        Directory.GetDirectories(path, AppleNativeLibraryUtility.SourceNativeLibraryFolderName, SearchOption.AllDirectories)
+                        : new string[0]).ToArray();
+            
+            if (nativeLibraryRootPaths.Length == 1)
             {
-                string[] nativeLibraryRootPaths = Directory.GetDirectories(packageSystemPath, AppleNativeLibraryUtility.SourceNativeLibraryFolderName, SearchOption.AllDirectories);
-                if (nativeLibraryRootPaths.Length == 1)
+                // Verfied that the provided path has a "NativeLibraries~" folder
+                string[] configPaths = Directory.GetDirectories(nativeLibraryRootPaths[0]);
+                if (configPaths.Length > 0)
                 {
-                    // Verfied that the provided path has a "NativeLibraries~" folder
-                    string[] configPaths = Directory.GetDirectories(nativeLibraryRootPaths[0]);
-                    if (configPaths.Length > 0)
+                    foreach (string currConfigPath in configPaths)
                     {
-                        foreach (string currConfigPath in configPaths)
+                        string configFolderName = new DirectoryInfo(currConfigPath).Name;
+                        if (configFolderName == AppleConfigID.Release || configFolderName == AppleConfigID.Debug)
                         {
-                            string configFolderName = new DirectoryInfo(currConfigPath).Name;
-                            if (configFolderName == AppleConfigID.Release || configFolderName == AppleConfigID.Debug)
+                            // Verified a valid config, create an inner dictionary for this config
+                            _nativeLibraryCollection[configFolderName] = new Dictionary<string, AppleNativeLibrary>();
+                            string[] platformPaths = Directory.GetDirectories(currConfigPath);
+                            if (platformPaths.Length > 1)
                             {
-                                // Verified a valid config, create an inner dictionary for this config
-                                _nativeLibraryCollection[configFolderName] = new Dictionary<string, AppleNativeLibrary>();
-                                string[] platformPaths = Directory.GetDirectories(currConfigPath);
-                                if (platformPaths.Length > 1)
+                                foreach (string currPlatformPath in platformPaths)
                                 {
-                                    foreach (string currPlatformPath in platformPaths)
+                                    string platformId = new DirectoryInfo(currPlatformPath).Name;
+                                    if (Array.IndexOf(ApplePlatformID.ValidPlatforms, platformId) >= 0)
                                     {
-                                        string platformId = new DirectoryInfo(currPlatformPath).Name;
-                                        if (Array.IndexOf(ApplePlatformID.ValidPlatforms, platformId) >= 0)
+                                        // Valid platform folder found, try to read necessary data to fill out an AppleNativeLibrary object.
+                                        string libraryName = string.Empty;
+                                        string dSymName = string.Empty;
+                                        string libraryPath = string.Empty;
+
+                                        string[] entryPaths = Directory.GetFileSystemEntries(currPlatformPath);
+                                        foreach (string path in entryPaths)
                                         {
-                                            // Valid platform folder found, try to read necessary data to fill out an AppleNativeLibrary object.
-                                            string libraryName = string.Empty;
-                                            string dSymName = string.Empty;
-                                            string libraryPath = string.Empty;
-
-                                            string[] entryPaths = Directory.GetFileSystemEntries(currPlatformPath);
-                                            foreach (string path in entryPaths)
+                                            if (path.EndsWith(".framework") || path.EndsWith(".bundle"))
                                             {
-                                                if (path.EndsWith(".framework") || path.EndsWith(".bundle"))
-                                                {
-                                                    var dirInfo = new DirectoryInfo(path);
-                                                    libraryName = dirInfo.Name;
-                                                    libraryPath = dirInfo.Parent.FullName;
-                                                }
-                                                else if (path.EndsWith(".a"))
-                                                {
-                                                    var fileInfo = new FileInfo(path);
-                                                    libraryName = fileInfo.Name;
-                                                    libraryPath = fileInfo.Directory.FullName;
-                                                }
-                                                else if (path.EndsWith(".dSYM"))
-                                                {
-                                                    dSymName = new FileInfo(path).Name;
-                                                }
+                                                var dirInfo = new DirectoryInfo(path);
+                                                libraryName = dirInfo.Name;
+                                                libraryPath = dirInfo.Parent.FullName;
                                             }
-
-                                            if (libraryName != string.Empty && libraryPath != string.Empty)
+                                            else if (path.EndsWith(".a"))
                                             {
-                                                _nativeLibraryCollection[configFolderName][platformId] = new AppleNativeLibrary(libraryName, dSymName, platformId, libraryPath);
+                                                var fileInfo = new FileInfo(path);
+                                                libraryName = fileInfo.Name;
+                                                libraryPath = fileInfo.Directory.FullName;
                                             }
+                                            else if (path.EndsWith(".dSYM"))
+                                            {
+                                                dSymName = new FileInfo(path).Name;
+                                            }
+                                        }
+
+                                        if (libraryName != string.Empty && libraryPath != string.Empty)
+                                        {
+                                            _nativeLibraryCollection[configFolderName][platformId] = new AppleNativeLibrary(libraryName, dSymName, platformId, libraryPath);
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                }
 
-                    // Try to find a valid native library for Play mode support in the Editor
-                    PlayModeSupportLibrary = GetLibrary(AppleConfigID.Release, ApplePlatformID.macOS);
-                    if (!PlayModeSupportLibrary.IsValid)
-                    {
-                        PlayModeSupportLibrary = GetLibrary(AppleConfigID.Debug, ApplePlatformID.macOS);
-                    }
+                // Try to find a valid native library for Play mode support in the Editor
+                PlayModeSupportLibrary = GetLibrary(AppleConfigID.Release, ApplePlatformID.macOS);
+                if (!PlayModeSupportLibrary.IsValid)
+                {
+                    PlayModeSupportLibrary = GetLibrary(AppleConfigID.Debug, ApplePlatformID.macOS);
                 }
             }
         }
@@ -110,7 +116,7 @@ namespace Apple.Core
             IsNativePackage = false;
 
             PlayModeSupportLibrary = AppleNativeLibrary.Invalid;
-            SourcePath = string.Empty;
+            SearchPaths = new string[0];
             _nativeLibraryCollection = new Dictionary<string, Dictionary<string, AppleNativeLibrary>>();
         }
 
@@ -145,7 +151,7 @@ namespace Apple.Core
         /// <summary>
         /// Records the source of the package in the local file system.
         /// </summary>
-        public string SourcePath { get; private set; }
+        public string[] SearchPaths { get; private set; }
 
         /// <summary>
         /// True when this package references native libraries.
