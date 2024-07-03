@@ -11,4 +11,3 @@ plug-ins/**/TestPlayers
 **/.vscode/*
 **/Apple Plug-In Support/
 **/Apple Plug-In Support.meta
-**/NativeLibraries~/
