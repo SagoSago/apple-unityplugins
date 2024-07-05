@@ -107,6 +107,7 @@ namespace Apple.Core
         /// </summary>
         private enum UpdateState
         {
+            NotInitialized,
             Initializing,
             Updating
         }
@@ -114,7 +115,7 @@ namespace Apple.Core
         /// <summary>
         /// Tracks current state
         /// </summary>
-        private static UpdateState _updateState;
+        private static UpdateState _updateState = UpdateState.NotInitialized;
 
         /// <summary>
         /// State tracking for selected build config
@@ -134,7 +135,7 @@ namespace Apple.Core
         /// </summary>
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths, bool didDomainReload)
         {
-            if (_updateState != UpdateState.Initializing) { return; }
+            if (_updateState != UpdateState.NotInitialized) { return; }
             
             // Ensure that the necessary Apple Unity Plug-In support folders exist and let user know if any have been created.
             string createFolderMessage = "[Apple Unity Plug-ins] Creating support folders:\n";
