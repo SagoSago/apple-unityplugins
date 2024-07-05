@@ -10,6 +10,8 @@ using UnityEditor.iOS.Xcode.Extensions;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
+using System.Collections;
+using Unity.EditorCoroutines.Editor;
 
 namespace Apple.Core
 {
@@ -380,6 +382,14 @@ namespace Apple.Core
 
             return AppleNativeLibrary.Invalid;
         }
+        
+        public static IEnumerator WaitPackagesReady(Action onReady)
+        {
+            while (_updateState != UpdateState.Updating) {
+                yield return null;
+            }
+            onReady?.Invoke();
+        }
 
         /// <summary>
         /// Unity package manager API retrives package updates via iterable collections of PackageInfo structs; this helper will handle updating the the environment's representation of each Apple package.
@@ -595,6 +605,12 @@ namespace Apple.Core
         /// <param name="projectPath">The generated Xcode project path.</param>
         /// <param name="project">An instance of Unity's PBXProject for interfacing with the generated Xcode project at <c>projectPath</c></param>
         public static void ProcessWrapperLibrary(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
+        {
+            void onReady() => ProcessWrapperLibraryAfterPackagesReady(pluginDisplayName, unityBuildTarget, projectPath, project);
+            EditorCoroutineUtility.StartCoroutineOwnerless(ApplePlugInEnvironment.WaitPackagesReady(onReady));
+        }
+            
+        public static void ProcessWrapperLibraryAfterPackagesReady(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
         {
             string platform = ApplePlugInEnvironment.GetApplePlatformID(unityBuildTarget);
             if (platform == ApplePlatformID.Unknown)
