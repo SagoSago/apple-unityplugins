@@ -38,6 +38,7 @@ namespace Apple.Core
         } 
     }
 
+    [InitializeOnLoad]
     public class ApplePlugInEnvironment : AssetPostprocessor
     {   
         /// <summary>
@@ -105,6 +106,7 @@ namespace Apple.Core
         /// </summary>
         private enum UpdateState
         {
+			NotInitialized,
             Initializing,
             Updating
         }
@@ -126,13 +128,25 @@ namespace Apple.Core
         /// State tracking for select platform
         /// </summary>
         private static string _trackedApplePlatform;
+		
+        /// <summary>
+        /// Initialize C# objects. Do not create or load assets here.
+        /// </summary>
+        static ApplePlugInEnvironment()
+        {
+            // Initialize collection of packages
+            _appleUnityPackages = new Dictionary<string, AppleUnityPackage>();
+            _packageManagerListRequest = Client.List(false, true);
+            
+            _updateState = UpdateState.NotInitialized;
+        }
 
         /// <summary>
         /// Initialize the ApplePlugInEnvironment after all assets finished processing, so we can alter our own.
         /// </summary>
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths, bool didDomainReload)
         {
-            if (_updateState != UpdateState.Initializing) { return; }
+            if (_updateState != UpdateState.NotInitialized) { return; }
             
             // Ensure that the necessary Apple Unity Plug-In support folders exist and let user know if any have been created.
             string createFolderMessage = "[Apple Unity Plug-ins] Creating support folders:\n";
@@ -166,10 +180,6 @@ namespace Apple.Core
 
             _defaultProfile = AppleBuildProfile.DefaultProfile();
             _defaultProfile.ResolveBuildSteps();
-
-            // Initialize collection of packages
-            _appleUnityPackages = new Dictionary<string, AppleUnityPackage>();
-            _packageManagerListRequest = Client.List(false, true);
 
             // Initialize state tracking
             _updateState = UpdateState.Initializing;
