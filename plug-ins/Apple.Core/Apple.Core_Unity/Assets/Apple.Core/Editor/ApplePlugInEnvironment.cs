@@ -40,6 +40,7 @@ namespace Apple.Core
         } 
     }
 
+    [InitializeOnLoad]
     public class ApplePlugInEnvironment : AssetPostprocessor
     {   
         /// <summary>
@@ -115,7 +116,7 @@ namespace Apple.Core
         /// <summary>
         /// Tracks current state
         /// </summary>
-        private static UpdateState _updateState = UpdateState.NotInitialized;
+        private static UpdateState _updateState;
 
         /// <summary>
         /// State tracking for selected build config
@@ -129,14 +130,32 @@ namespace Apple.Core
         /// State tracking for select platform
         /// </summary>
         private static string _trackedApplePlatform;
+        
+        /// <summary>
+        /// Static constructor to initialize C# objects. Do not create or load assets here.
+        /// </summary>
+        static ApplePlugInEnvironment()
+        {
+            Debug.Log("[ApplePluginEnvironment] Static constructor");
+            _updateState = UpdateState.NotInitialized;
+
+            // Initialize collection of packages
+            _appleUnityPackages = new Dictionary<string, AppleUnityPackage>();
+            _packageManagerListRequest = Client.List(false, true);
+
+            EditorApplication.update += OnEditorUpdate;
+            Events.registeringPackages += OnPackageManagerRegistrationUpdate;
+        }
 
         /// <summary>
         /// Initialize the ApplePlugInEnvironment after all assets finished processing, so we can alter our own.
         /// </summary>
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths, bool didDomainReload)
         {
+            Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets check preconditions");
             if (_updateState != UpdateState.NotInitialized) { return; }
             
+            Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets enter");
             // Ensure that the necessary Apple Unity Plug-In support folders exist and let user know if any have been created.
             string createFolderMessage = "[Apple Unity Plug-ins] Creating support folders:\n";
             bool foldersCreated = false;
@@ -170,17 +189,12 @@ namespace Apple.Core
             _defaultProfile = AppleBuildProfile.DefaultProfile();
             _defaultProfile.ResolveBuildSteps();
 
-            // Initialize collection of packages
-            _appleUnityPackages = new Dictionary<string, AppleUnityPackage>();
-            _packageManagerListRequest = Client.List(false, true);
-
             // Initialize state tracking
             _updateState = UpdateState.Initializing;
             _trackedAppleConfig = GetAppleBuildConfig();
             _trackedApplePlatform = GetApplePlatformID(EditorUserBuildSettings.activeBuildTarget);
-
-            EditorApplication.update += OnEditorUpdate;
-            Events.registeringPackages += OnPackageManagerRegistrationUpdate;
+            
+            Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets finish");
         }
 
         /// <summary>
@@ -191,9 +205,11 @@ namespace Apple.Core
         {
             switch (_updateState)
             {
-                case UpdateState.Initializing:
+                case UpdateState.Initializing:                    
                     if (_packageManagerListRequest.IsCompleted && _packageManagerListRequest.Status == StatusCode.Success)
                     {
+                        Debug.Log("[ApplePlugInEnvironment] OnEditorUpdate packages request completed");
+                        
                         // Need to handle a the special case of libraries being within this project, so postpone logging results.
                         AddPackagesFromCollection(_packageManagerListRequest.Result, false);
 
@@ -218,6 +234,8 @@ namespace Apple.Core
                         LogLibrarySummary();
                         SyncronizePlayModeSupportLibraries();
                         ValidateLibraries();
+                        
+                        Debug.Log($"[ApplePlugInEnvironment] OnEditorUpdate included {_appleUnityPackages.Count} package(s)");
 
                         _updateState = UpdateState.Updating;
                     }
@@ -376,6 +394,7 @@ namespace Apple.Core
         /// <returns>The desired AppleNativeLibrary, or an Invalid AppleNativeLibrary if none is found.</returns>
         public static AppleNativeLibrary GetLibrary(string packageDisplayName, string appleBuildConfig, string applePlatform)
         {
+            Debug.Log($"[ApplePlugInEnvironment] GetLibrary call containing {_appleUnityPackages.Count} package(s)");
             if (_appleUnityPackages.ContainsKey(packageDisplayName))
             {
                 return _appleUnityPackages[packageDisplayName].GetLibrary(appleBuildConfig, applePlatform);
@@ -389,6 +408,7 @@ namespace Apple.Core
             while (_updateState != UpdateState.Updating) {
                 yield return null;
             }
+            Debug.Log("[ApplePlugInEnvironment] WaitPackagesReady invoking action");
             onReady?.Invoke();
         }
 
@@ -607,12 +627,14 @@ namespace Apple.Core
         /// <param name="project">An instance of Unity's PBXProject for interfacing with the generated Xcode project at <c>projectPath</c></param>
         public static void ProcessWrapperLibrary(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
         {
+            Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary start");
             void onReady() => ProcessWrapperLibraryAfterPackagesReady(pluginDisplayName, unityBuildTarget, projectPath, project);
             EditorCoroutineUtility.StartCoroutineOwnerless(ApplePlugInEnvironment.WaitPackagesReady(onReady));
         }
             
         public static void ProcessWrapperLibraryAfterPackagesReady(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
         {
+            Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibraryAfterPackagesReady start");
             string platform = ApplePlugInEnvironment.GetApplePlatformID(unityBuildTarget);
             if (platform == ApplePlatformID.Unknown)
             {
