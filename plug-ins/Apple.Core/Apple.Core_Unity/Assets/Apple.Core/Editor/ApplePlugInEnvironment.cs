@@ -132,7 +132,6 @@ namespace Apple.Core
         /// </summary>
         static ApplePlugInEnvironment()
         {
-            Debug.Log("[ApplePluginEnvironment] Static constructor");
             _updateState = UpdateState.NotInitialized;
 
             // Initialize collection of packages
@@ -148,10 +147,8 @@ namespace Apple.Core
         /// </summary>
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths, bool didDomainReload)
         {
-            Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets check preconditions");
             if (_updateState != UpdateState.NotInitialized) { return; }
             
-            Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets enter");
             // Ensure that the necessary Apple Unity Plug-In support folders exist and let user know if any have been created.
             string createFolderMessage = "[Apple Unity Plug-ins] Creating support folders:\n";
             bool foldersCreated = false;
@@ -197,16 +194,10 @@ namespace Apple.Core
                 long start = nowMilis();
                 const long timeout = 10000;
                 while (_updateState != UpdateState.Updating && nowMilis() - start < timeout) {
-                    Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets calling EditorUpdate");
-                    
                     Thread.Sleep(500);
                     OnEditorUpdate();
                 }
-
-                Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary after packages ready");
             }
-            
-            Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets finish");
         }
 
         /// <summary>
@@ -220,8 +211,6 @@ namespace Apple.Core
                 case UpdateState.Initializing:                    
                     if (_packageManagerListRequest.IsCompleted && _packageManagerListRequest.Status == StatusCode.Success)
                     {
-                        Debug.Log("[ApplePlugInEnvironment] OnEditorUpdate packages request completed");
-                        
                         // Need to handle a the special case of libraries being within this project, so postpone logging results.
                         AddPackagesFromCollection(_packageManagerListRequest.Result, false);
 
@@ -246,8 +235,6 @@ namespace Apple.Core
                         LogLibrarySummary();
                         SyncronizePlayModeSupportLibraries();
                         ValidateLibraries();
-                        
-                        Debug.Log($"[ApplePlugInEnvironment] OnEditorUpdate included {_appleUnityPackages.Count} package(s)");
 
                         _updateState = UpdateState.Updating;
                     }
@@ -406,7 +393,6 @@ namespace Apple.Core
         /// <returns>The desired AppleNativeLibrary, or an Invalid AppleNativeLibrary if none is found.</returns>
         public static AppleNativeLibrary GetLibrary(string packageDisplayName, string appleBuildConfig, string applePlatform)
         {
-            Debug.Log($"[ApplePlugInEnvironment] GetLibrary call containing {_appleUnityPackages.Count} package(s)");
             if (_appleUnityPackages.ContainsKey(packageDisplayName))
             {
                 return _appleUnityPackages[packageDisplayName].GetLibrary(appleBuildConfig, applePlatform);
@@ -632,7 +618,6 @@ namespace Apple.Core
         /// <param name="project">An instance of Unity's PBXProject for interfacing with the generated Xcode project at <c>projectPath</c></param>
         public static void ProcessWrapperLibrary(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
         {
-            Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary start");
             string platform = ApplePlugInEnvironment.GetApplePlatformID(unityBuildTarget);
             if (platform == ApplePlatformID.Unknown)
             {
