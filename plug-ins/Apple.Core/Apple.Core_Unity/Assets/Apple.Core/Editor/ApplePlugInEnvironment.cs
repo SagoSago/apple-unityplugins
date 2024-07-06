@@ -190,6 +190,22 @@ namespace Apple.Core
             _trackedAppleConfig = GetAppleBuildConfig();
             _trackedApplePlatform = GetApplePlatformID(EditorUserBuildSettings.activeBuildTarget);
             
+            if (Application.isBatchMode) {
+                // when in -batchmode -quit, EditorUpdate is not called, so we have to
+                // lock the main thread until the packages are downloaded
+                static long nowMilis() => DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                long start = nowMilis();
+                const long timeout = 10000;
+                while (_updateState != UpdateState.Updating && nowMilis() - start < timeout) {
+                    Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets calling EditorUpdate");
+                    
+                    Thread.Sleep(500);
+                    OnEditorUpdate();
+                }
+
+                Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary after packages ready");
+            }
+            
             Debug.Log("[ApplePlugInEnvironment] OnPostprocessAllAssets finish");
         }
 
@@ -198,7 +214,7 @@ namespace Apple.Core
         /// Once initialization has occured, this method will handle runtime validation for available libraries against selected Unity Editor settings.
         /// </summary>
         private static void OnEditorUpdate()
-        {
+        {            
             switch (_updateState)
             {
                 case UpdateState.Initializing:                    
@@ -617,15 +633,6 @@ namespace Apple.Core
         public static void ProcessWrapperLibrary(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
         {
             Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary start");
-
-            static long nowMilis() => DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            long start = nowMilis();
-            const long timeout = 10000;
-            while (!ApplePlugInEnvironment.ArePackagesReady && nowMilis() - start < timeout) {
-                Thread.Sleep(500);
-            }
-
-            Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary after packages ready");
             string platform = ApplePlugInEnvironment.GetApplePlatformID(unityBuildTarget);
             if (platform == ApplePlatformID.Unknown)
             {
