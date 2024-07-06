@@ -1,17 +1,13 @@
 #if (UNITY_EDITOR_OSX && (UNITY_IOS || UNITY_TVOS || UNITY_STANDALONE_OSX || UNITY_VISIONOS))
 using System;
 using System.IO;
-using System.Linq;
 using System.Collections.Generic;
 using UnityEditor;
-using UnityEditor.Build;
 using UnityEditor.iOS.Xcode;
-using UnityEditor.iOS.Xcode.Extensions;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
-using System.Collections;
-using Unity.EditorCoroutines.Editor;
+using System.Threading;
 
 namespace Apple.Core
 {
@@ -403,14 +399,7 @@ namespace Apple.Core
             return AppleNativeLibrary.Invalid;
         }
         
-        public static IEnumerator WaitPackagesReady(Action onReady)
-        {
-            while (_updateState != UpdateState.Updating) {
-                yield return null;
-            }
-            Debug.Log("[ApplePlugInEnvironment] WaitPackagesReady invoking action");
-            onReady?.Invoke();
-        }
+        public static bool ArePackagesReady => _updateState == UpdateState.Updating;
 
         /// <summary>
         /// Unity package manager API retrives package updates via iterable collections of PackageInfo structs; this helper will handle updating the the environment's representation of each Apple package.
@@ -628,13 +617,15 @@ namespace Apple.Core
         public static void ProcessWrapperLibrary(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
         {
             Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary start");
-            void onReady() => ProcessWrapperLibraryAfterPackagesReady(pluginDisplayName, unityBuildTarget, projectPath, project);
-            EditorCoroutineUtility.StartCoroutineOwnerless(ApplePlugInEnvironment.WaitPackagesReady(onReady));
-        }
-            
-        public static void ProcessWrapperLibraryAfterPackagesReady(string pluginDisplayName, BuildTarget unityBuildTarget, string projectPath, PBXProject project)
-        {
-            Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibraryAfterPackagesReady start");
+
+            static long nowMilis() => DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            long start = nowMilis();
+            const long timeout = 10000;
+            while (!ApplePlugInEnvironment.ArePackagesReady && nowMilis() - start < timeout) {
+                Thread.Sleep(500);
+            }
+
+            Debug.Log($"[ApplePlugInEnvironment] ProcessWrapperLibrary after packages ready");
             string platform = ApplePlugInEnvironment.GetApplePlatformID(unityBuildTarget);
             if (platform == ApplePlatformID.Unknown)
             {
